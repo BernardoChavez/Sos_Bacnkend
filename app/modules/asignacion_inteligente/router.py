@@ -28,10 +28,11 @@ async def procesar_incidente_ia(incidente_id: uuid.UUID):
     import asyncio
     from app.core.database import SessionLocal
     
-    await asyncio.sleep(6) 
-    
-    db = SessionLocal()
     try:
+        # 1. Esperar un momento corto para asegurar que los archivos se escribieron en disco
+        await asyncio.sleep(2) 
+        
+        db = SessionLocal()
         incidente = db.query(models.Incidente).filter(models.Incidente.id == incidente_id).first()
         if not incidente:
             return
@@ -40,19 +41,23 @@ async def procesar_incidente_ia(incidente_id: uuid.UUID):
         evidencias_foto = [e for e in incidente.evidencias if e.tipo_recurso == 'foto']
 
         transcripcion = ""
-        if evidencias_audio:
-            transcripcion = await ia_engine.process_voice_report(evidencias_audio[0].url_recurso)
-            incidente.transcripcion_voz_ia = transcripcion
-
         res_ia = {
             "especialidad": "Mecánica General", 
-            "prioridad": "Baja", 
-            "resumen": "Analizando evidencias...",
-            "diagnostico_ia": "Ficha técnica en proceso..."
+            "prioridad": "Media", 
+            "resumen": "Procesando solicitud...",
+            "diagnostico_ia": "Analizando evidencias para el taller..."
         }
 
-        if evidencias_foto:
-            res_ia = await ia_engine.classify_incident_vision([e.url_recurso for e in evidencias_foto], transcripcion)
+        # Intentar procesar con IA (pero sin bloquearse si falla)
+        try:
+            if evidencias_audio:
+                transcripcion = await ia_engine.process_voice_report(evidencias_audio[0].url_recurso)
+                incidente.transcripcion_voz_ia = transcripcion
+
+            if evidencias_foto:
+                res_ia = await ia_engine.classify_incident_vision([e.url_recurso for e in evidencias_foto], transcripcion)
+        except Exception as ia_err:
+            print(f"⚠️ IA Analysis failed, using fallback: {ia_err}")
         
         categoria = res_ia.get("especialidad", "Mecánica General")
         incidente.prioridad_final = res_ia.get("prioridad", "Media")
@@ -60,7 +65,7 @@ async def procesar_incidente_ia(incidente_id: uuid.UUID):
         incidente.resumen_ia = res_ia.get("diagnostico_ia", res_ia.get("resumen"))
         incidente.transcripcion_voz_ia = transcripcion or res_ia.get("resumen")
 
-        # Asignación Inteligente (CU2.2.12)
+        # Asignación Inteligente (Incluso si la IA falló, asignamos por cercanía)
         talleres = db.query(models.Taller).filter(models.Taller.esta_activo == True).all()
         
         from datetime import timedelta
@@ -68,90 +73,35 @@ async def procesar_incidente_ia(incidente_id: uuid.UUID):
         dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
         dia_actual = dias_semana[ahora_bolivia.weekday()]
         
-        mejor_taller_especialista = None
-        mejor_taller_general = None
-        distancia_min_esp = float('inf')
-        distancia_min_gen = float('inf')
+        mejor_taller = None
+        distancia_min = float('inf')
 
         for taller in talleres:
-            if taller.latitud is None or taller.longitud is None:
-                continue
+            if taller.latitud is None or taller.longitud is None: continue
 
-            taller_abierto = True
-            horario = taller.horarios_atencion.get(dia_actual, "") if taller.horarios_atencion else ""
-            if "-" in horario:
-                try:
-                    apertura, cierre = horario.split("-")
-                    ap_time = datetime.strptime(apertura.strip().replace('.', ':'), "%H:%M").time()
-                    ci_time = datetime.strptime(cierre.strip().replace('.', ':'), "%H:%M").time()
-                    ahora_time = ahora_bolivia.time()
-                    if not (ap_time <= ahora_time <= ci_time):
-                        taller_abierto = False
-                except:
-                    pass
-                    
-            if not taller_abierto:
-                continue
+            # Verificar si hay técnicos libres
+            tiene_tecnico_libre = db.query(models.Tecnico).filter_by(taller_id=taller.id, disponible=True).first()
+            if not tiene_tecnico_libre: continue
 
-            match_especialidad = (taller.especialidad.lower() in categoria.lower() or categoria.lower() in taller.especialidad.lower())
-            es_general = (taller.especialidad == 'General' or taller.especialidad == 'Mecánica General')
-
-            if match_especialidad or es_general:
-                incidentes_activos = db.query(models.Incidente).filter(
-                    models.Incidente.taller_id == taller.id,
-                    models.Incidente.estado.in_(['asignado', 'aceptado', 'en_camino', 'en_sitio', 'en_reparacion'])
-                ).count()
-
-                if incidentes_activos < (taller.capacidad_teorica or 5):
-                    tiene_tecnico_libre = db.query(models.Tecnico).filter_by(taller_id=taller.id, disponible=True).first()
-                    
-                    if tiene_tecnico_libre:
-                        dist = haversine(incidente.latitud, incidente.longitud, taller.latitud, taller.longitud)
-                        
-                        if match_especialidad and dist < distancia_min_esp:
-                            distancia_min_esp = dist
-                            mejor_taller_especialista = taller
-                        elif es_general and dist < distancia_min_gen:
-                            distancia_min_gen = dist
-                            mejor_taller_general = taller
-
-        mejor_taller = mejor_taller_especialista if mejor_taller_especialista else mejor_taller_general
+            dist = haversine(incidente.latitud, incidente.longitud, taller.latitud, taller.longitud)
+            if dist < distancia_min:
+                distancia_min = dist
+                mejor_taller = taller
 
         if mejor_taller:
             incidente.taller_id = mejor_taller.id
             incidente.estado = 'asignado'
             
-            nueva_bitacora = models.BitacoraEstado(
-                incidente_id=incidente.id,
-                estado_anterior='pendiente',
-                estado_nuevo='asignado',
-                usuario_cambio_id=incidente.cliente_id
-            )
-            db.add(nueva_bitacora)
-            
-            # 1. Notificar al Admin del Taller
+            # Notificaciones
             admin = db.query(models.Usuario).filter(models.Usuario.taller_id == mejor_taller.id, models.Usuario.rol == 'admin_taller').first()
             if admin:
-                notif_admin = models.Notificacion(
-                    usuario_id=admin.id,
-                    titulo="¡Nueva Emergencia!",
-                    mensaje=f"Se te ha asignado un caso de {categoria}."
-                )
-                db.add(notif_admin)
                 await manager.send_personal_message({
                     "tipo": "notificacion",
                     "titulo": "¡Nueva Emergencia!",
-                    "mensaje": f"Se te ha asignado un caso de {categoria}.",
+                    "mensaje": f"Se te ha asignado un caso. Revisa el despacho.",
                     "fecha": datetime.utcnow().strftime("%H:%M")
                 }, admin.id)
 
-            # 2. Notificar al Cliente
-            notif_cliente = models.Notificacion(
-                usuario_id=incidente.cliente_id,
-                titulo="Taller Asignado",
-                mensaje=f"El taller '{mejor_taller.nombre}' ha aceptado tu solicitud y está procesando el despacho."
-            )
-            db.add(notif_cliente)
             await manager.send_personal_message({
                 "tipo": "notificacion",
                 "titulo": "Taller Asignado",
@@ -159,10 +109,9 @@ async def procesar_incidente_ia(incidente_id: uuid.UUID):
                 "fecha": datetime.utcnow().strftime("%H:%M")
             }, incidente.cliente_id)
 
-            db.commit()
         db.commit()
     except Exception as e:
-        print(f"Error en procesar_incidente_ia: {e}")
+        print(f"❌ Error crítico en procesar_incidente_ia: {e}")
     finally:
         db.close()
 

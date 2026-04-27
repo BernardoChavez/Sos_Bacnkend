@@ -66,6 +66,7 @@ async def solicitar_emergencia(
 async def subir_evidencia(
     incidente_id: uuid.UUID,
     tipo: str, # 'foto' o 'audio'
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(database.get_db),
     current_user: models.Usuario = Depends(auth.check_permissions("emergencias.evidencia.subir"))
@@ -92,4 +93,9 @@ async def subir_evidencia(
     db.add(nueva_evidencia)
     db.commit()
     db.refresh(nueva_evidencia)
+
+    # RE-ACTIVAR IA: Ahora que hay una nueva foto/audio, procesamos de nuevo
+    from app.modules.asignacion_inteligente.router import procesar_incidente_ia
+    background_tasks.add_task(procesar_incidente_ia, incidente_id)
+
     return nueva_evidencia
