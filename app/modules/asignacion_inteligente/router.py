@@ -73,20 +73,60 @@ async def procesar_incidente_ia(incidente_id: uuid.UUID):
         dias_semana = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo']
         dia_actual = dias_semana[ahora_bolivia.weekday()]
         
-        mejor_taller = None
-        distancia_min = float('inf')
+        mejor_taller_especialista = None
+        mejor_taller_general = None
+        distancia_min_esp = float('inf')
+        distancia_min_gen = float('inf')
 
         for taller in talleres:
             if taller.latitud is None or taller.longitud is None: continue
 
-            # Verificar si hay técnicos libres
+            # --- 1. VERIFICAR HORARIO (IGUAL QUE EN LOCAL) ---
+            taller_abierto = True
+            horario = taller.horarios_atencion.get(dia_actual, "") if taller.horarios_atencion else ""
+            if "-" in horario:
+                try:
+                    apertura, cierre = horario.split("-")
+                    ap_time = datetime.strptime(apertura.strip().replace('.', ':'), "%H:%M").time()
+                    ci_time = datetime.strptime(cierre.strip().replace('.', ':'), "%H:%M").time()
+                    ahora_time = ahora_bolivia.time()
+                    if not (ap_time <= ahora_time <= ci_time):
+                        taller_abierto = False
+                except: pass
+            
+            if not taller_abierto: continue
+
+            # --- 2. VERIFICAR TÉCNICOS ---
             tiene_tecnico_libre = db.query(models.Tecnico).filter_by(taller_id=taller.id, disponible=True).first()
             if not tiene_tecnico_libre: continue
 
             dist = haversine(incidente.latitud, incidente.longitud, taller.latitud, taller.longitud)
-            if dist < distancia_min:
-                distancia_min = dist
-                mejor_taller = taller
+            
+            # --- 3. MATCH DE ESPECIALIDAD (IGUAL QUE EN LOCAL) ---
+            match_especialidad = (taller.especialidad.lower() in categoria.lower() or categoria.lower() in taller.especialidad.lower())
+            es_general = (taller.especialidad == 'General' or taller.especialidad == 'Mecánica General')
+            
+            if match_especialidad and dist < distancia_min_esp:
+                distancia_min_esp = dist
+                mejor_taller_especialista = taller
+            elif es_general and dist < distancia_min_gen:
+                distancia_min_gen = dist
+                mejor_taller_general = taller
+
+        # Prioridad: Especialista -> General -> El más cercano disponible
+        mejor_taller = mejor_taller_especialista if mejor_taller_especialista else mejor_taller_general
+        
+        # Fallback de emergencia: Si no hay especialistas ni generales libres, asignamos el más cercano disponible
+        if not mejor_taller:
+            distancia_min_emergencia = float('inf')
+            for taller in talleres:
+                if taller.latitud and taller.longitud:
+                    t_libre = db.query(models.Tecnico).filter_by(taller_id=taller.id, disponible=True).first()
+                    if t_libre:
+                        d = haversine(incidente.latitud, incidente.longitud, taller.latitud, taller.longitud)
+                        if d < distancia_min_emergencia:
+                            distancia_min_emergencia = d
+                            mejor_taller = taller
 
         if mejor_taller:
             incidente.taller_id = mejor_taller.id
