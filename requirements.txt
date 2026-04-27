@@ -1,5 +1,5 @@
 fastapi
-uvicorn
+uvicorn[standard]
 gunicorn
 sqlalchemy
 psycopg2-binary
@@ -12,3 +12,5 @@ requests
 pydantic[email]
 pydantic-settings
 email-validator
+bcrypt
+websockets
