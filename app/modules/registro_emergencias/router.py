@@ -80,8 +80,9 @@ async def subir_evidencia(
     with open(file_path, "wb") as buffer:
         buffer.write(await file.read())
 
-    # Generar URL real accesible
-    file_url = f"http://localhost:8000/static/{unique_filename}"
+    # Generar URL real accesible (Dinámico para Producción)
+    base_url = os.getenv("BASE_URL", "http://localhost:8000")
+    file_url = f"{base_url}/static/{unique_filename}"
     
     nueva_evidencia = models.Evidencia(
         incidente_id=incidente_id,

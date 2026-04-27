@@ -189,6 +189,12 @@ def rastrear_tecnico(
             distancia = haversine(tecnico.latitud or 0, tecnico.longitud or 0, incidente.latitud, incidente.longitud)
             eta_minutos = round(distancia * 2) + 5
 
+    # Fallback para el monto: Si no está en el incidente, buscarlo en la tabla de pagos
+    monto_final = float(incidente.monto_total or 0)
+    if monto_final == 0:
+        pago = db.query(models.Pago).filter(models.Pago.incidente_id == incidente_id).first()
+        if pago: monto_final = float(pago.monto or 0)
+
     return {
         "incidente_id": incidente_id,
         "tecnico_id": tecnico.id if tecnico else None,
@@ -201,5 +207,5 @@ def rastrear_tecnico(
         "estado": incidente.estado,
         "resumen_ia": incidente.resumen_ia,
         "transcripcion_voz_ia": incidente.transcripcion_voz_ia,
-        "monto_total": float(incidente.monto_total or 0)
+        "monto_total": monto_final
     }
