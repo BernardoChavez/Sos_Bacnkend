@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+env/
+build/
+dist/
+
+# Secretos y Configuración
+.env
+.env.example
+
+# Datos y Temporales
+*.db
+*.sqlite3
+uploads/*
+!uploads/.gitkeep
+test_db.py
+convertir_sql.py
+supabase_final_fix.sql
+MIGRACION_COMPLETA_SOS.md
+
+# IDEs
+.vscode/
+.idea/

@@ -1,0 +1,61 @@
+==========================================================================
+   GUIA DE CONEXION REAL: SOS AUTOMOTRIZ (CICLO 2 - IA & GPS)
+==========================================================================
+
+Este documento detalla los pasos para conectar el Backend y el Frontend 
+locales con dispositivos moviles externos usando tuneles HTTPS.
+
+--------------------------------------------------------------------------
+PASO 1: PREPARACION DEL BACKEND (SERVIDOR)
+--------------------------------------------------------------------------
+1. Asegurate de tener tu GEMINI_API_KEY en el archivo .env.
+2. Inicia el servidor de base de datos.
+3. Ejecuta el script de poblado final:
+   > .\venv\Scripts\python.exe scratch_seed_final.py
+4. Enciende el servidor FastAPI escuchando a la red:
+   > uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+--------------------------------------------------------------------------
+PASO 2: EXPOSICION DE TUNELES (INTERNET)
+--------------------------------------------------------------------------
+Necesitas DOS terminales adicionales abiertas:
+
+TERMINAL A (Backend - Localtunnel):
+   > lt --port 8000
+   * Copia la URL generada (ej: https://lemon-bats-brake.loca.lt)
+
+TERMINAL B (Frontend - Ngrok):
+   > ngrok http 4200
+   * Copia la URL generada (ej: https://xxx-xxx.ngrok-free.dev)
+
+--------------------------------------------------------------------------
+PASO 3: CONFIGURACION DEL FRONTEND (CLIENTE)
+--------------------------------------------------------------------------
+1. Ve al archivo: src/app/core/services/auth.ts (y demas servicios).
+2. Cambia la 'apiUrl' para que apunte a la URL de Localtunnel del Paso 2.
+3. Enciende el servidor de Angular con permisos de Host:
+   > ng serve --host 0.0.0.0 --allowed-hosts all
+
+--------------------------------------------------------------------------
+PASO 4: ACCESO DESDE EL CELULAR
+--------------------------------------------------------------------------
+1. PRIMERO: Abre en el navegador de tu celular la URL del Backend (Localtunnel).
+2. Veras una pantalla de advertencia: presiona "CLICK TO CONTINUE".
+3. SEGUNDO: Abre la URL de Ngrok del Frontend en tu celular.
+4. IMPORTANTE: Cuando el navegador te pida permiso para "MICROFONO" y "UBICACION", dale a PERMITIR. Sin esto, la IA y el Mapa no funcionaran.
+
+--------------------------------------------------------------------------
+PASO 5: FLUJO DE PRUEBA REAL
+--------------------------------------------------------------------------
+1. Entra como CLIENTE (cliente@sos.com / cliente123).
+2. Solicita ayuda: Graba audio real y sube foto real.
+3. Entra en PC como TALLER (taller@sos.com / taller123).
+4. Veras la FICHA TECNICA de la IA. Asigna un tecnico y acepta.
+5. Regresa al Celular y ve a la pantalla de "RASTREO" para ver el GPS en vivo.
+
+--------------------------------------------------------------------------
+NOTAS DE SEGURIDAD:
+- Si usas Chrome en el celular y no te deja conectar por "Mixed Content", 
+  ve a Configuracion del Sitio -> Contenido No Seguro -> PERMITIR.
+- Las URLs de Localtunnel y Ngrok cambian cada vez que reinicias los comandos.
+==========================================================================
