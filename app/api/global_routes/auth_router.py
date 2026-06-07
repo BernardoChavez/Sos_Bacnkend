@@ -47,7 +47,15 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
             detail=f"Contraseña incorrecta. Te quedan {intentos_restantes} intentos."
         )
     
-    # 4. Login exitoso -> Reiniciar contadores
+    # 4. Verificar cross-tenant login
+    tenant_header = request.headers.get("x-tenant")
+    if tenant_header and user.empresa and user.empresa.slug != tenant_header:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail=f"Estas credenciales pertenecen a la empresa '{user.empresa.nombre}'. Por favor, inicia sesión en su portal correspondiente."
+        )
+
+    # 5. Login exitoso -> Reiniciar contadores
     user.intentos_fallidos = 0
     user.bloqueado_hasta = None
     db.commit()
