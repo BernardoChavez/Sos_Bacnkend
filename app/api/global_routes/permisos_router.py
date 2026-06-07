@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-from app.models import models
-from app.schemas import schemas
+from app.models import global_models as models
+from app.schemas import global_schemas as schemas
 from app.core import auth, database
 
 router = APIRouter(prefix="/permisos", tags=["Roles y Permisos"])

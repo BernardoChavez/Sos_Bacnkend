@@ -1,18 +1,8 @@
-from pydantic import BaseModel, EmailStr, ConfigDict
-from typing import Optional, List, Any
+from pydantic import BaseModel, ConfigDict
+from typing import Optional, List
 from datetime import datetime
 import uuid
-
-# --- Especialidades ---
-class EspecialidadBase(BaseModel):
-    nombre_especialidad: str
-
-class EspecialidadCreate(EspecialidadBase):
-    pass
-
-class EspecialidadOut(EspecialidadBase):
-    id: int
-    model_config = ConfigDict(from_attributes=True)
+from app.schemas.global_schemas import UserOut
 
 # --- Talleres ---
 class TallerBase(BaseModel):
@@ -25,7 +15,6 @@ class TallerBase(BaseModel):
     esta_activo: bool = True
     especialidad: Optional[str] = 'General'
     horarios_atencion: Optional[dict] = None
-    poligono_cobertura: Optional[dict] = None
 
 class TallerCreate(TallerBase):
     pass
@@ -40,7 +29,6 @@ class TallerUpdate(BaseModel):
     capacidad_teorica: Optional[int] = None
     esta_activo: Optional[bool] = None
     horarios_atencion: Optional[dict] = None
-    poligono_cobertura: Optional[dict] = None
 
 class TallerOut(TallerBase):
     id: int
@@ -50,92 +38,9 @@ class TallerOut(TallerBase):
 class TallerWithAdminOut(TallerOut):
     admin_nombre: Optional[str] = None
 
-
-# --- Usuarios ---
-class UserBase(BaseModel):
-    nombre: str
-    email: EmailStr
-    telefono: Optional[str] = None
-    rol: str
-    taller_id: Optional[int] = None
-
-class UserCreate(UserBase):
-    password: str
-
-class UserUpdate(BaseModel):
-    nombre: Optional[str] = None
-    email: Optional[EmailStr] = None
-    telefono: Optional[str] = None
-    password: Optional[str] = None
-
-class UserOut(UserBase):
-    id: int
-    fecha_registro: Optional[datetime] = None 
-    permisos: List[str] = [] 
-    model_config = ConfigDict(from_attributes=True)
-
 class UserWithTallerOut(UserOut):
-    taller_nombre: Optional[str] = None # Solo para listados detallados
-    disponible: Optional[bool] = None   # Estado de disponibilidad del técnico
-
-# --- Vehículos ---
-class VehiculoBase(BaseModel):
-    placa: str
-    marca: str
-    modelo: str
-    color: Optional[str] = None
-    anio: Optional[int] = None
-
-class VehiculoCreate(VehiculoBase):
-    cliente_id: Optional[int] = None
-
-class VehiculoUpdate(BaseModel):
-    marca: Optional[str] = None
-    modelo: Optional[str] = None
-    color: Optional[str] = None
-    anio: Optional[int] = None
-
-class VehiculoOut(VehiculoBase):
-    id: int
-    cliente_id: int
-    cliente_nombre: Optional[str] = None # Para el Super Admin
-    model_config = ConfigDict(from_attributes=True)
-
-# --- Autenticación y Matriz ---
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-    user: UserOut # Usa el schema UserOut ya corregido
-
-class PermisoOut(BaseModel):
-    id: int
-    codigo: str
-    descripcion: str
-    model_config = ConfigDict(from_attributes=True)
-
-class MatrizItem(BaseModel):
-    id: int
-    codigo: str
-    descripcion: str
-    cliente: bool
-    admin_taller: bool
-    tecnico: bool
-
-class PasswordRecover(BaseModel):
-    email: EmailStr
-
-class PasswordReset(BaseModel):
-    token: str
-    new_password: str
-
-class PasswordVerifyCode(BaseModel):
-    email: EmailStr
-    code: str
-
-class PasswordResetCode(BaseModel):
-    email: EmailStr
-    code: str
-    new_password: str
+    taller_nombre: Optional[str] = None 
+    disponible: Optional[bool] = None   
 
 # --- Técnicos ---
 class TecnicoBase(BaseModel):
@@ -157,13 +62,6 @@ class TecnicoOut(TecnicoBase):
     longitud: Optional[float] = None
     model_config = ConfigDict(from_attributes=True)
 
-# --- Estadísticas (Dashboard CU21) ---
-class StatsResumen(BaseModel):
-    total_usuarios: int
-    total_talleres: int
-    total_vehiculos: int
-    emergencias_hoy: int
-
 # --- RESEÑAS ---
 class ResenaOut(BaseModel):
     id: int
@@ -172,11 +70,10 @@ class ResenaOut(BaseModel):
     fecha_resena: Optional[datetime] = None
     model_config = ConfigDict(from_attributes=True)
 
-# --- CICLO 2: EMERGENCIAS E IA ---
-
+# --- EMERGENCIAS E IA ---
 class EvidenciaBase(BaseModel):
     url_recurso: str
-    tipo_recurso: str # 'foto', 'audio'
+    tipo_recurso: str 
 
 class EvidenciaOut(EvidenciaBase):
     id: int
@@ -189,7 +86,6 @@ class IncidenteBase(BaseModel):
     longitud: float
 
 class IncidenteCreate(IncidenteBase):
-    # El cliente_id se tomará del token
     pass
 
 class IncidenteUpdate(BaseModel):
@@ -211,7 +107,7 @@ class IncidenteOut(IncidenteBase):
     diagnostico_tecnico: Optional[str]
     monto_total: Optional[float]
     evidencias: List[EvidenciaOut] = []
-    resenas: List[ResenaOut] = [] # Ahora usamos el esquema real
+    resenas: List[ResenaOut] = [] 
     model_config = ConfigDict(from_attributes=True)
 
 class BitacoraEstadoOut(BaseModel):

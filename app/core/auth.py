@@ -9,7 +9,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.models.models import Usuario, RolPermiso, Permiso
+from app.models.global_models import Usuario, RolPermiso, Permiso
 
 SECRET_KEY = os.getenv("SECRET_KEY", "sos-automotriz-ultra-secret-2026")
 ALGORITHM = "HS256"
@@ -101,7 +101,9 @@ def check_permissions(permiso_requerido):
     Soporta strings simples o listas de strings.
     """
     def decorator(current_user: Usuario = Depends(get_current_user), db: Session = Depends(get_db)):
-        # Eliminamos el bypass para que todo sea validado por la matriz
+        # Bypass para los roles dueños del sistema y del tenant
+        if current_user.rol in ["super_admin", "admin_empresa"]:
+            return current_user
         
         # Si permiso_requerido es una lista, checkeamos si el rol del usuario está en ella
         if isinstance(permiso_requerido, list):

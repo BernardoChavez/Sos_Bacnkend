@@ -1,3 +1,4 @@
+from app.core import tenant_middleware
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session, joinedload, aliased
 from typing import List, Optional
@@ -6,8 +7,8 @@ from datetime import datetime
 from fastapi.encoders import jsonable_encoder
 
 from app.core import database, auth
-from app.models import models
-from app.schemas import schemas
+from app.models import tenant_models as models
+from app.schemas import tenant_schemas as schemas
 from app.core.socket_manager import manager
 
 router = APIRouter(
@@ -17,7 +18,7 @@ router = APIRouter(
 
 @router.get("/cliente/mis-solicitudes")
 def listar_mis_solicitudes(
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(tenant_middleware.get_db_for_tenant),
     current_user: models.Usuario = Depends(auth.get_current_user)
 ):
     """CU2.2.3 & 2.2.14: Listar solicitudes y trazabilidad."""
@@ -57,7 +58,7 @@ def listar_mis_solicitudes(
 
 @router.get("/tecnico/mis-trabajos", response_model=List[schemas.IncidenteOut])
 def listar_mis_trabajos_tecnico(
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(tenant_middleware.get_db_for_tenant),
     current_user: models.Usuario = Depends(auth.get_current_user)
 ):
     """CU2.2.7: Atención de solicitudes para técnicos."""
@@ -80,7 +81,7 @@ def listar_mis_trabajos_tecnico(
 @router.get("/taller/{taller_id}/solicitudes", response_model=List[schemas.IncidenteOut])
 def listar_solicitudes_taller(
     taller_id: int,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(tenant_middleware.get_db_for_tenant),
     current_user: models.Usuario = Depends(auth.check_permissions("taller.despacho.ver"))
 ):
     """CU2.2.7: Atención de solicitudes para talleres."""
@@ -99,7 +100,7 @@ def gestionar_incidente(
     accion: str, # 'aceptar', 'rechazar'
     background_tasks: BackgroundTasks,
     tecnico_id: Optional[int] = None,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(tenant_middleware.get_db_for_tenant),
     current_user: models.Usuario = Depends(auth.check_permissions("taller.servicio.aceptar")) # Usamos aceptar como base, el servidor validará la lógica interna
 ):
     """CU2.2.7: Aceptar o rechazar servicios."""
@@ -186,7 +187,7 @@ def gestionar_incidente(
     return incidente
 
 @router.patch("/{incidente_id}/reparar")
-def empezar_reparacion(incidente_id: uuid.UUID, db: Session = Depends(database.get_db)):
+def empezar_reparacion(incidente_id: uuid.UUID, db: Session = Depends(tenant_middleware.get_db_for_tenant)):
     """CU2.2.7: Actualizar estado durante la atención."""
     incidente = db.query(models.Incidente).filter(models.Incidente.id == incidente_id).first()
     if not incidente: raise HTTPException(status_code=404)
@@ -200,7 +201,7 @@ def finalizar_servicio(
     diagnostico: str, 
     monto: float,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(tenant_middleware.get_db_for_tenant),
     current_user: models.Usuario = Depends(auth.get_current_user)
 ):
     """CU2.2.3 & 2.2.7: Cierre del servicio."""
@@ -236,7 +237,7 @@ def calificar_servicio(
     incidente_id: uuid.UUID,
     calificacion: int, 
     comentario: str,
-    db: Session = Depends(database.get_db),
+    db: Session = Depends(tenant_middleware.get_db_for_tenant),
     current_user: models.Usuario = Depends(auth.get_current_user)
 ):
     """CU2.2.14: Calificar y cerrar trazabilidad."""

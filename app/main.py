@@ -2,18 +2,11 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from app.core.database import engine, Base
-from app.models import models
+from app.models import global_models, tenant_models
 from app.core.socket_manager import manager
 
-# --- IMPORTACIÓN MODULAR (ARQUITECTURA DE PAQUETES) ---
-from app.modules.usuarios_vehiculos import auth_router, usuarios_router, vehiculos_router, permisos_router
-from app.modules.talleres_tecnicos import talleres_router, tecnicos_router, especialidades_router
-from app.modules.notificaciones import router as notificaciones_router
-from app.modules.trazabilidad_metricas import stats_router, router as trazabilidad_router
-from app.modules.registro_emergencias import router as registro_router
-from app.modules.gestion_atencion import router as gestion_atencion_router
-from app.modules.asignacion_inteligente import router as asignacion_router
-from app.modules.pagos import router as pagos_router
+from app.api.global_routes import auth_router, usuarios_router, vehiculos_router, permisos_router, emergencias_router, empresas_router
+from app.api.tenant_routes import talleres_router, tecnicos_router, especialidades_router, incidentes_router, stats_router
 
 from app.core.audit_logger import registrar_auditoria
 from jose import jwt, JWTError
@@ -122,8 +115,9 @@ class AuditoriaMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         return response
 
-# Crear tablas
-models.Base.metadata.create_all(bind=engine)
+# Crear tablas públicas y globales al arrancar (Las de tenant se crean dinámicamente)
+global_models.Base.metadata.create_all(bind=engine)
+tenant_models.Base.metadata.create_all(bind=engine) # Esto registrará los metadatos pero no debería afectar a public si el search_path está limpio, pero por si acaso, lo ideal es que tenant se instancie con create_tenant_schema
 
 app = FastAPI(
     title="SOS Automotriz API",
@@ -135,7 +129,12 @@ app = FastAPI(
 app.add_middleware(AuditoriaMiddleware)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://sos-frontend-phi.vercel.app",
+        "http://localhost:4200",
+        "http://localhost",
+        "*"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -146,37 +145,20 @@ if not os.path.exists("uploads"):
 
 app.mount("/static", StaticFiles(directory="uploads"), name="static")
 
-# --- 3. INCLUSIÓN DE ROUTERS POR MÓDULOS (PAQUETES) ---
-
-# Módulo 2.2.1: Usuarios y Vehículos
+# Rutas Globales (Public Schema)
 app.include_router(auth_router.router)
 app.include_router(usuarios_router.router)
 app.include_router(vehiculos_router.router)
 app.include_router(permisos_router.router)
+app.include_router(emergencias_router.router)
+app.include_router(empresas_router.router)
 
-# Módulo 2.2.6: Gestión de Talleres y Técnicos
+# Rutas Tenant (Empresa Schema)
 app.include_router(talleres_router.router)
 app.include_router(tecnicos_router.router)
 app.include_router(especialidades_router.router)
-
-# Módulo 2.2.2: Registro de Emergencias
-app.include_router(registro_router.router)
-
-# Módulo 2.2.3 & 2.2.7: Gestión y Atención de Solicitudes
-app.include_router(gestion_atencion_router.router)
-
-# Módulo 2.2.11 & 2.2.12: Asignación e IA
-app.include_router(asignacion_router.router)
-
-# Módulo 2.2.5: Pagos del Cliente
-app.include_router(pagos_router.router)
-
-# Módulo 2.2.13: Notificaciones
-app.include_router(notificaciones_router.router)
-
-# Módulo 2.2.14: Historial, Trazabilidad y Métricas
+app.include_router(incidentes_router.router)
 app.include_router(stats_router.router)
-app.include_router(trazabilidad_router.router)
 
 
 @app.websocket("/ws/{user_id}")

@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, 
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from app.models import models
-from app.schemas import schemas
+from app.models import global_models as models
+from app.schemas import global_schemas as schemas
 from app.core import auth, database, mailer
 from app.core.audit_logger import registrar_auditoria
 
@@ -59,6 +59,7 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
             "sub": user.email, 
             "rol": user.rol, 
             "id": user.id, 
+            "taller_id": user.taller_id,
             "permisos": lista_permisos
         }
     )
@@ -68,6 +69,7 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
         "nombre": user.nombre,
         "email": user.email,
         "rol": user.rol,
+        "empresa_id": user.empresa_id,
         "taller_id": user.taller_id,
         "telefono": user.telefono,
         "permisos": lista_permisos

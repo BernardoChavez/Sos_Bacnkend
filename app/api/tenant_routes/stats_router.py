@@ -1,13 +1,14 @@
+from app.core import tenant_middleware
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.core import database, auth
-from app.models import models
+from app.models import tenant_models as models
 
 router = APIRouter(prefix="/stats", tags=["Dashboard"])
 
 @router.get("/resumen")
-def obtener_resumen(db: Session = Depends(database.get_db), 
+def obtener_resumen(db: Session = Depends(tenant_middleware.get_db_for_tenant), 
                     user=Depends(auth.get_current_user)):
     if user.rol == "super_admin":
         total_recaudado = db.query(func.sum(models.Pago.monto_comision)).filter(models.Pago.estado_pago == 'completado').scalar() or 0
@@ -83,7 +84,7 @@ def obtener_resumen(db: Session = Depends(database.get_db),
     return {}
 
 @router.get("/resenas")
-def obtener_todas_las_resenas(db: Session = Depends(database.get_db), 
+def obtener_todas_las_resenas(db: Session = Depends(tenant_middleware.get_db_for_tenant), 
                              user=Depends(auth.get_current_user)):
     query = db.query(
         models.Resena.calificacion,

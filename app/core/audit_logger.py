@@ -1,6 +1,6 @@
 from fastapi import Request
 from sqlalchemy.orm import Session
-from app.models import models
+from app.models import global_models as models
 from datetime import datetime
 
 def registrar_auditoria(request, user_id, accion, detalle):

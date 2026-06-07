@@ -1,14 +1,15 @@
+from app.core import tenant_middleware
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
-from app.models import models
-from app.schemas import schemas
+from app.models import tenant_models as models
+from app.schemas import tenant_schemas as schemas
 from app.core import database, auth
 
 router = APIRouter(prefix="/tecnicos", tags=["Personal Técnico"])
 
 @router.get("/", response_model=List[schemas.UserWithTallerOut])
-def listar_todos_los_tecnicos(db: Session = Depends(database.get_db), 
+def listar_todos_los_tecnicos(db: Session = Depends(tenant_middleware.get_db_for_tenant), 
                              current_user=Depends(auth.check_permissions("usuarios.gestionar"))):
     """Lista todos los usuarios con rol técnico (Solo Super Admin)."""
     results = db.query(models.Usuario, models.Taller.nombre, models.Tecnico.disponible)\
@@ -38,7 +39,7 @@ def listar_todos_los_tecnicos(db: Session = Depends(database.get_db),
     return users
 
 @router.post("/")
-def registrar_tecnico(tecnico: schemas.TecnicoCreate, db: Session = Depends(database.get_db)):
+def registrar_tecnico(tecnico: schemas.TecnicoCreate, db: Session = Depends(tenant_middleware.get_db_for_tenant)):
     db_existe = db.query(models.Tecnico).filter(models.Tecnico.usuario_id == tecnico.usuario_id).first()
     if db_existe:
         raise HTTPException(status_code=400, detail="El técnico ya tiene una ficha activa")
@@ -54,7 +55,7 @@ def registrar_tecnico(tecnico: schemas.TecnicoCreate, db: Session = Depends(data
     return {"message": "Técnico vinculado exitosamente"}
 
 @router.get("/perfil", response_model=schemas.TecnicoOut)
-def obtener_perfil_tecnico(db: Session = Depends(database.get_db), 
+def obtener_perfil_tecnico(db: Session = Depends(tenant_middleware.get_db_for_tenant), 
                            current_user: models.Usuario = Depends(auth.check_permissions("tecnico.operar"))):
     """Obtiene la ficha técnica del usuario logueado."""
     tecnico = db.query(models.Tecnico).filter(models.Tecnico.usuario_id == current_user.id).first()
@@ -64,7 +65,7 @@ def obtener_perfil_tecnico(db: Session = Depends(database.get_db),
 
 @router.put("/perfil", response_model=schemas.TecnicoOut)
 def actualizar_perfil_tecnico(data: schemas.TecnicoUpdate, 
-                              db: Session = Depends(database.get_db), 
+                              db: Session = Depends(tenant_middleware.get_db_for_tenant), 
                               current_user: models.Usuario = Depends(auth.check_permissions("tecnico.operar"))):
     """Permite al técnico actualizar su propia disponibilidad y especialidad."""
     tecnico = db.query(models.Tecnico).filter(models.Tecnico.usuario_id == current_user.id).first()
@@ -80,7 +81,7 @@ def actualizar_perfil_tecnico(data: schemas.TecnicoUpdate,
     return tecnico
 
 @router.patch("/{usuario_id}/disponibilidad")
-def cambiar_disponibilidad(usuario_id: int, disponible: bool, db: Session = Depends(database.get_db)):
+def cambiar_disponibilidad(usuario_id: int, disponible: bool, db: Session = Depends(tenant_middleware.get_db_for_tenant)):
     tecnico = db.query(models.Tecnico).filter(models.Tecnico.usuario_id == usuario_id).first()
     if not tecnico:
         raise HTTPException(status_code=404, detail="No se encontró la ficha del técnico")
@@ -91,7 +92,7 @@ def cambiar_disponibilidad(usuario_id: int, disponible: bool, db: Session = Depe
 
 @router.patch("/perfil/ubicacion")
 def actualizar_ubicacion(latitud: float, longitud: float, 
-                        db: Session = Depends(database.get_db), 
+                        db: Session = Depends(tenant_middleware.get_db_for_tenant), 
                         current_user: models.Usuario = Depends(auth.check_permissions("tecnico.operar"))):
     """CU24: Actualiza la geolocalización en tiempo real del técnico."""
     tecnico = db.query(models.Tecnico).filter(models.Tecnico.usuario_id == current_user.id).first()
