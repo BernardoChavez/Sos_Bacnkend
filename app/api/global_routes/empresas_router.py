@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import text
 from typing import List
 from app.models import global_models as models
@@ -65,4 +65,21 @@ def registrar_empresa(
 @router.get("/", response_model=List[schemas.EmpresaWithSuscripcionOut])
 def listar_empresas(db: Session = Depends(database.get_db)):
     """Lista todas las empresas registradas (Módulo SuperAdmin)."""
-    return db.query(models.Empresa).all()
+    return db.query(models.Empresa).options(joinedload(models.Empresa.suscripcion)).all()
+# New endpoint: detailed view of an empresa including subscription info
+@router.get("/{empresa_id}", response_model=schemas.EmpresaWithSuscripcionOut)
+def obtener_empresa_detalle(empresa_id: int, db: Session = Depends(database.get_db),
+                              current_user: models.Usuario = Depends(auth.check_permissions(["super_admin_global"]))):
+    empresa = db.query(models.Empresa).filter(models.Empresa.id == empresa_id).first()
+    if not empresa:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+    return empresa
+
+# New endpoint: get tenant subdomain (schema name) for an empresa
+@router.get("/{empresa_id}/subdominio", response_model=str)
+def obtener_subdominio(empresa_id: int, db: Session = Depends(database.get_db),
+                         current_user: models.Usuario = Depends(auth.check_permissions(["super_admin_global"]))):
+    empresa = db.query(models.Empresa).filter(models.Empresa.id == empresa_id).first()
+    if not empresa:
+        raise HTTPException(status_code=404, detail="Empresa no encontrada")
+    return empresa.schema_name

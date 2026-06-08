@@ -11,7 +11,7 @@ router = APIRouter(prefix="/stats", tags=["Dashboard"])
 def obtener_resumen(db: Session = Depends(tenant_middleware.get_db_for_tenant), 
                     user=Depends(auth.get_current_user)):
     if user.rol == "super_admin":
-        total_recaudado = db.query(func.sum(models.Pago.monto_comision)).filter(models.Pago.estado_pago == 'completado').scalar() or 0
+        total_recaudado = db.query(func.sum(models.Pago.monto_comision)).filter(models.Pago.estado_pago == 'cancelado').scalar() or 0
         
         # Cálculo de reputación para el Super Admin
         top_talleres = db.query(
@@ -40,7 +40,7 @@ def obtener_resumen(db: Session = Depends(tenant_middleware.get_db_for_tenant),
         # Ingresos del taller: total pagado menos la comisión de la web
         ingresos_taller = db.query(func.sum(models.Pago.monto - models.Pago.monto_comision))\
                             .join(models.Incidente)\
-                            .filter(models.Incidente.taller_id == user.taller_id, models.Pago.estado_pago == 'completado').scalar() or 0
+                            .filter(models.Incidente.taller_id == user.taller_id, models.Pago.estado_pago == 'cancelado').scalar() or 0
                             
         # Evaluar estado dinámico
         estado_dinamico = "Inactivo"

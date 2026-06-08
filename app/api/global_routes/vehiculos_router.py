@@ -11,7 +11,7 @@ router = APIRouter(prefix="/vehiculos", tags=["Gestión de Vehículos"])
 def crear_vehiculo(
     vehiculo: schemas.VehiculoCreate, 
     db: Session = Depends(database.get_db),
-    current_user: models.Usuario = Depends(auth.check_permissions("usuarios.vehiculos.crear"))
+    current_user: models.Usuario = Depends(auth.get_current_user)
 ):
     # ... resto del código igual ...
     cliente_id = vehiculo.cliente_id
@@ -30,7 +30,7 @@ def crear_vehiculo(
 @router.get("/", response_model=List[schemas.VehiculoOut])
 def listar_vehiculos(
     db: Session = Depends(database.get_db),
-    current_user: models.Usuario = Depends(auth.check_permissions("usuarios.vehiculos.ver"))
+    current_user: models.Usuario = Depends(auth.get_current_user)
 ):
     query = db.query(models.Vehiculo, models.Usuario.nombre)\
               .outerjoin(models.Usuario, models.Vehiculo.cliente_id == models.Usuario.id)
@@ -54,7 +54,7 @@ def actualizar_vehiculo(
     id: int, 
     vehiculo_update: schemas.VehiculoUpdate, 
     db: Session = Depends(database.get_db),
-    current_user: models.Usuario = Depends(auth.check_permissions("usuarios.vehiculos.modificar"))
+    current_user: models.Usuario = Depends(auth.get_current_user)
 ):
     vehiculo_db = db.query(models.Vehiculo).filter(models.Vehiculo.id == id).first()
     if not vehiculo_db:
@@ -75,7 +75,7 @@ def actualizar_vehiculo(
 def eliminar_vehiculo(
     id: int, 
     db: Session = Depends(database.get_db),
-    current_user: models.Usuario = Depends(auth.check_permissions("usuarios.vehiculos.eliminar"))
+    current_user: models.Usuario = Depends(auth.get_current_user)
 ):
     vehiculo = db.query(models.Vehiculo).filter(models.Vehiculo.id == id).first()
     if not vehiculo:

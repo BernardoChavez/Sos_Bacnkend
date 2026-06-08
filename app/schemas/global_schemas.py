@@ -6,6 +6,7 @@ from datetime import datetime
 class SuscripcionBase(BaseModel):
     nombre: str
     max_talleres: int
+    max_tecnicos: int = 5
     precio: float
 
 class SuscripcionOut(SuscripcionBase):

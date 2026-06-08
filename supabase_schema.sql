@@ -137,7 +137,17 @@ BEGIN
         estado_anterior VARCHAR(50),
         estado_nuevo VARCHAR(50),
         usuario_cambio_id INTEGER, -- FK Logica a public.usuarios
+        latitud_registro FLOAT,
+        longitud_registro FLOAT,
         fecha_hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )';
+
+    EXECUTE 'CREATE TABLE ' || quote_ident(tenant_name) || '.resenas (
+        id SERIAL PRIMARY KEY,
+        incidente_id UUID UNIQUE REFERENCES ' || quote_ident(tenant_name) || '.incidentes(id) ON DELETE CASCADE,
+        calificacion INTEGER NOT NULL,
+        comentario TEXT,
+        fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )';
     
 END;

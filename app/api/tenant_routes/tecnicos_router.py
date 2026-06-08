@@ -10,12 +10,17 @@ router = APIRouter(prefix="/tecnicos", tags=["Personal Técnico"])
 
 @router.get("/", response_model=List[schemas.UserWithTallerOut])
 def listar_todos_los_tecnicos(db: Session = Depends(tenant_middleware.get_db_for_tenant), 
-                             current_user=Depends(auth.check_permissions("usuarios.gestionar"))):
-    """Lista todos los usuarios con rol técnico (Solo Super Admin)."""
-    results = db.query(models.Usuario, models.Taller.nombre, models.Tecnico.disponible)\
+                             current_user=Depends(auth.get_current_user)):
+    """Lista todos los usuarios con rol técnico (filtra automáticamente si es admin_taller)."""
+    query = db.query(models.Usuario, models.Taller.nombre, models.Tecnico.disponible)\
               .outerjoin(models.Taller, models.Usuario.taller_id == models.Taller.id)\
               .outerjoin(models.Tecnico, models.Usuario.id == models.Tecnico.usuario_id)\
-              .filter(models.Usuario.rol == "tecnico").all()
+              .filter(models.Usuario.rol == "tecnico")
+              
+    if current_user.rol == "admin_taller":
+        query = query.filter(models.Usuario.taller_id == current_user.taller_id)
+        
+    results = query.all()
     
     users = []
     for u, taller_nombre, disponible in results:
@@ -93,7 +98,7 @@ def cambiar_disponibilidad(usuario_id: int, disponible: bool, db: Session = Depe
 @router.patch("/perfil/ubicacion")
 def actualizar_ubicacion(latitud: float, longitud: float, 
                         db: Session = Depends(tenant_middleware.get_db_for_tenant), 
-                        current_user: models.Usuario = Depends(auth.check_permissions("tecnico.operar"))):
+                        current_user: models.Usuario = Depends(auth.check_permissions(["super_admin", "admin_empresa", "admin_taller", "tecnico"]))):
     """CU24: Actualiza la geolocalización en tiempo real del técnico."""
     tecnico = db.query(models.Tecnico).filter(models.Tecnico.usuario_id == current_user.id).first()
     if not tecnico:

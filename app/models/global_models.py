@@ -27,6 +27,7 @@ class Suscripcion(Base):
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
     nombre = Column(String(100))
     max_talleres = Column(Integer)
+    max_tecnicos = Column(Integer, default=5)
     precio = Column(Numeric(10, 2), default=0.0)
     empresas = relationship("Empresa", back_populates="suscripcion")
 

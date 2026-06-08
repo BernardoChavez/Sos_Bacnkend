@@ -11,16 +11,50 @@ router = APIRouter(prefix="/usuarios", tags=["Gestión de Usuarios"])
 def crear_usuario(
     user_in: schemas.UserCreate, 
     db: Session = Depends(database.get_db),
-    current_user: models.Usuario = Depends(auth.check_permissions(["super_admin", "admin_taller"]))
+    current_user: models.Usuario = Depends(auth.check_permissions(["super_admin", "admin_empresa", "admin_taller"]))
 ):
-    """Endpoint CU6: SuperAdmin/AdminTaller crea usuarios (ej. Técnicos)."""
+    """Endpoint CU6: SuperAdmin/AdminEmpresa/AdminTaller crea usuarios (ej. Técnicos)."""
     if db.query(models.Usuario).filter(models.Usuario.email == user_in.email).first():
         raise HTTPException(status_code=400, detail="El email ya está registrado")
 
+    # === VERIFICACIONES DE ROL ===
+    if current_user.rol == "admin_taller":
+        if user_in.rol != "tecnico":
+            raise HTTPException(status_code=403, detail="Solo puedes crear técnicos para tu taller")
+        user_in.taller_id = current_user.taller_id # Inyección forzada de seguridad
+
+    elif current_user.rol == "admin_empresa":
+        if user_in.rol not in ["admin_taller", "tecnico"]:
+            raise HTTPException(status_code=403, detail="Solo puedes crear administradores de taller o técnicos")
+            
+        if user_in.rol == "admin_taller" and not user_in.taller_id:
+            raise HTTPException(status_code=400, detail="Debes asignar un taller al administrador de taller")
+
+    elif current_user.rol == "super_admin":
+        pass 
+        
+    else:
+        raise HTTPException(status_code=403, detail="No tienes permisos para crear usuarios")
+
+    # Inyectar la misma empresa
     if current_user.rol in ["admin_taller", "admin_empresa"]:
-        if current_user.rol == "admin_taller" and user_in.rol not in ["tecnico", "admin_taller"]:
-            raise HTTPException(status_code=403, detail="Solo puedes crear técnicos o administradores")
-        user_in.empresa_id = current_user.empresa_id # Forzamos que sea de la misma empresa
+        user_in.empresa_id = current_user.empresa_id
+        
+    # === VERIFICACIÓN DE LÍMITES DE SUSCRIPCIÓN PARA TÉCNICOS ===
+    if user_in.rol == "tecnico" and current_user.empresa:
+        suscripcion = current_user.empresa.suscripcion
+        if suscripcion:
+            max_tecnicos = suscripcion.max_tecnicos
+            tecnicos_actuales = db.query(models.Usuario).filter(
+                models.Usuario.empresa_id == current_user.empresa_id,
+                models.Usuario.rol == "tecnico"
+            ).count()
+            
+            if tecnicos_actuales >= max_tecnicos:
+                raise HTTPException(
+                    status_code=402, 
+                    detail=f"Has alcanzado el límite de {max_tecnicos} técnicos de tu plan. Actualiza tu suscripción."
+                )
     
     # Validar fortaleza de contraseña
     auth.validate_password_strength(user_in.password)
@@ -36,6 +70,9 @@ def crear_usuario(
     )
     db.add(nuevo_usuario)
     db.commit()
+    
+    from sqlalchemy import text
+    db.execute(text("SET search_path TO public"))
     db.refresh(nuevo_usuario)
     
     # Nota: La creación del perfil Tecnico se delega a las rutas tenant 
@@ -53,6 +90,26 @@ def listar_usuarios(
         users = db.query(models.Usuario).all()
     else:
         users = db.query(models.Usuario).filter(models.Usuario.empresa_id == current_user.empresa_id).all()
+    return users
+
+@router.get("/taller/{taller_id}/tecnicos", response_model=List[schemas.UserOut])
+def listar_tecnicos_taller(
+    taller_id: int,
+    db: Session = Depends(database.get_db),
+    current_user: models.Usuario = Depends(auth.get_current_user)
+):
+    """Obtiene los técnicos asignados a un taller específico."""
+    # Validación de seguridad básica
+    if current_user.rol == "admin_taller" and current_user.taller_id != taller_id:
+        raise HTTPException(status_code=403, detail="No puedes ver técnicos de otros talleres")
+    
+    if current_user.rol not in ["super_admin", "admin_empresa", "admin_taller"]:
+        raise HTTPException(status_code=403, detail="No autorizado")
+
+    users = db.query(models.Usuario).filter(
+        models.Usuario.taller_id == taller_id,
+        models.Usuario.rol == "tecnico"
+    ).all()
     return users
 
 @router.put("/{usuario_id}", response_model=schemas.UserOut)
@@ -77,6 +134,8 @@ def actualizar_perfil(
     
     user_query.update(update_data, synchronize_session=False)
     db.commit()
+    from sqlalchemy import text
+    db.execute(text("SET search_path TO public"))
     db.refresh(user)
     return user
 

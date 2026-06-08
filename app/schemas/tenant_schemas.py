@@ -107,7 +107,6 @@ class IncidenteOut(IncidenteBase):
     diagnostico_tecnico: Optional[str]
     monto_total: Optional[float]
     evidencias: List[EvidenciaOut] = []
-    resenas: List[ResenaOut] = [] 
     model_config = ConfigDict(from_attributes=True)
 
 class BitacoraEstadoOut(BaseModel):

@@ -90,10 +90,24 @@ class Pago(Base):
 class BitacoraEstado(Base):
     __tablename__ = "bitacora_estados"
     id = Column(Integer, primary_key=True, index=True, autoincrement=True)
-    incidente_id = Column(UUID(as_uuid=True), ForeignKey("incidentes.id"))
+    incidente_id = Column(UUID(as_uuid=True), ForeignKey("incidentes.id", ondelete="CASCADE"))
     estado_anterior = Column(String(50))
     estado_nuevo = Column(String(50))
     usuario_cambio_id = Column(Integer, ForeignKey("public.usuarios.id"))
+    latitud_registro = Column(Float)
+    longitud_registro = Column(Float)
     fecha_hora = Column(DateTime, default=datetime.utcnow)
+
+    
     incidente = relationship("Incidente", back_populates="bitacora")
     usuario = relationship("Usuario")
+
+class Resena(Base):
+    __tablename__ = "resenas"
+    id = Column(Integer, primary_key=True, index=True, autoincrement=True)
+    incidente_id = Column(UUID(as_uuid=True), ForeignKey("incidentes.id", ondelete="CASCADE"), unique=True)
+    calificacion = Column(Integer, nullable=False)
+    comentario = Column(Text, nullable=True)
+    fecha_creacion = Column(DateTime, default=datetime.utcnow)
+    
+    incidente = relationship("Incidente")
