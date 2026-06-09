@@ -594,5 +594,102 @@ def obtener_reporte_pdf(
         "monto_recibido": pago.monto if (pago and pago.metodo_pago == 'EFECTIVO') else None,
         "cambio": (pago.monto - incidente.monto_total) if (pago and pago.metodo_pago == 'EFECTIVO' and pago.monto and incidente.monto_total) else None
     }
-    
     return reporte
+
+@router.get("/empresa/historial")
+def historial_empresa(
+    db: Session = Depends(tenant_middleware.get_db_for_tenant),
+    current_user: models.Usuario = Depends(auth.get_current_user)
+):
+    """Devuelve todo el historial consolidado de la empresa (todos sus talleres)."""
+    from sqlalchemy import text
+    if current_user.rol != 'super_admin' and current_user.rol != 'admin_empresa':
+        raise HTTPException(status_code=403, detail="No tienes permiso")
+        
+    incidentes = db.query(models.Incidente).options(joinedload(models.Incidente.evidencias)).order_by(models.Incidente.fecha_creacion.desc()).all()
+    
+    db.execute(text("SET search_path TO public"))
+    
+    incidentes_formateados = []
+    for inc in incidentes:
+        taller_nombre = "Sin Taller Asignado"
+        if inc.taller_id:
+            taller_row = db.execute(text(f"SELECT nombre FROM talleres WHERE id = '{inc.taller_id}'")).first()
+            if taller_row:
+                taller_nombre = taller_row[0]
+                
+        cliente_nombre = "Desconocido"
+        if inc.cliente_id:
+            cliente_row = db.execute(text(f"SELECT nombre FROM usuarios WHERE id = '{inc.cliente_id}'")).first()
+            if cliente_row:
+                cliente_nombre = cliente_row[0]
+                
+        inc_dict = jsonable_encoder(inc)
+        inc_dict["taller_nombre"] = taller_nombre
+        inc_dict["cliente_nombre"] = cliente_nombre
+        incidentes_formateados.append(inc_dict)
+        
+    return incidentes_formateados
+
+from pydantic import BaseModel
+
+class CotizacionRequest(BaseModel):
+    monto: float
+    detalle: str
+
+class RespuestaCotizacion(BaseModel):
+    aceptada: bool
+
+@router.post("/{incidente_id}/enviar-cotizacion")
+def enviar_cotizacion(
+    incidente_id: uuid.UUID,
+    cotizacion: CotizacionRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(tenant_middleware.get_db_for_tenant),
+    current_user: models.Usuario = Depends(auth.get_current_user)
+):
+    incidente = db.query(models.Incidente).filter(models.Incidente.id == incidente_id).first()
+    if not incidente: raise HTTPException(status_code=404, detail="Incidente no encontrado")
+    
+    estado_anterior = incidente.estado
+    incidente.estado = 'esperando_aprobacion'
+    incidente.cotizacion_monto = cotizacion.monto
+    incidente.cotizacion_detalle = cotizacion.detalle
+    
+    bitacora = models.BitacoraEstado(
+        incidente_id=incidente.id,
+        estado_anterior=estado_anterior,
+        estado_nuevo='esperando_aprobacion',
+        usuario_cambio_id=current_user.id
+    )
+    db.add(bitacora)
+    db.commit()
+    
+    # Notificar al cliente
+    titulo = "Cotización de Auxilio"
+    mensaje = f"El técnico ha presupuestado Bs. {cotizacion.monto}. Por favor aprueba o rechaza el servicio."
+    if incidente.cliente_id:
+        notif = global_models.Notificacion(
+            usuario_id=incidente.cliente_id,
+            titulo=titulo,
+            mensaje=mensaje
+        )
+        db.add(notif)
+        db.commit()
+        
+        background_tasks.add_task(
+            manager.send_personal_message,
+            {
+                "tipo": "COTIZACION_RECIBIDA",
+                "titulo": titulo,
+                "mensaje": mensaje,
+                "cotizacion_monto": cotizacion.monto,
+                "cotizacion_detalle": cotizacion.detalle,
+                "incidente_id": str(incidente.id),
+                "fecha": datetime.utcnow().strftime("%H:%M")
+            },
+            incidente.cliente_id
+        )
+    return {"message": "Cotización enviada al cliente"}
+
+

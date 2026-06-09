@@ -186,6 +186,11 @@ def solicitar_emergencia(
 from sqlalchemy.orm import joinedload, aliased
 from fastapi.encoders import jsonable_encoder
 from fastapi import UploadFile, File
+from pydantic import BaseModel
+
+class RespuestaCotizacionGlobal(BaseModel):
+    aceptada: bool
+
 
 @router.get("/cliente/mis-solicitudes")
 def listar_mis_solicitudes_global(
@@ -314,6 +319,8 @@ def get_rastreo_global(
                 "resumen_ia": incidente.resumen_ia,
                 "transcripcion_voz_ia": incidente.transcripcion_voz_ia or incidente.resumen_ia,
                 "monto_total": float(incidente.monto_total) if incidente.monto_total else 0.0,
+                "cotizacion_monto": float(incidente.cotizacion_monto) if incidente.cotizacion_monto else 0.0,
+                "cotizacion_detalle": incidente.cotizacion_detalle,
                 "distancia_km": 0.0,
                 "eta_estimado": "Calculando..."
             }
@@ -335,3 +342,81 @@ def get_rastreo_global(
 
     db.execute(text("SET search_path TO public"))
     raise HTTPException(status_code=404, detail="Incidente no encontrado")
+
+@router.post("/cliente/{incidente_id}/responder-cotizacion")
+def responder_cotizacion_global(
+    incidente_id: uuid.UUID,
+    respuesta: RespuestaCotizacionGlobal,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(database.get_db),
+    current_user: global_models.Usuario = Depends(auth.get_current_user)
+):
+    empresas = db.query(global_models.Empresa).filter(global_models.Empresa.esta_activa == True).all()
+    incidente = None
+    
+    for empresa in empresas:
+        if not empresa.schema_name: continue
+        db.execute(text(f"SET search_path TO {empresa.schema_name}, public"))
+        incidente = db.query(tenant_models.Incidente).filter(tenant_models.Incidente.id == incidente_id).first()
+        if incidente:
+            break
+            
+    if not incidente:
+        db.execute(text("SET search_path TO public"))
+        raise HTTPException(status_code=404, detail="Incidente no encontrado")
+        
+    estado_anterior = incidente.estado
+    
+    if respuesta.aceptada:
+        nuevo_estado = 'en_camino'
+        incidente.estado = nuevo_estado
+        msg_tecnico = "El cliente ACEPTÓ la cotización. Dirígete a la ubicación."
+    else:
+        nuevo_estado = 'cancelado'
+        incidente.estado = nuevo_estado
+        msg_tecnico = "El cliente RECHAZÓ la cotización. El servicio fue cancelado."
+        
+        if incidente.tecnico_id:
+            tecnico = db.query(tenant_models.Tecnico).filter(tenant_models.Tecnico.id == incidente.tecnico_id).first()
+            if tecnico:
+                tecnico.disponible = True
+                
+        pago = db.query(tenant_models.Pago).filter(tenant_models.Pago.incidente_id == incidente.id).first()
+        if pago:
+            pago.estado_pago = 'cancelado'
+            
+    bitacora = tenant_models.BitacoraEstado(
+        incidente_id=incidente.id,
+        estado_anterior=estado_anterior,
+        estado_nuevo=nuevo_estado,
+        usuario_cambio_id=current_user.id
+    )
+    db.add(bitacora)
+    db.commit()
+    
+    if incidente.tecnico_id:
+        tecnico = db.query(tenant_models.Tecnico).filter(tenant_models.Tecnico.id == incidente.tecnico_id).first()
+        if tecnico and tecnico.usuario_id:
+            notif = global_models.Notificacion(
+                usuario_id=tecnico.usuario_id,
+                titulo="Respuesta a Cotización",
+                mensaje=msg_tecnico
+            )
+            db.add(notif)
+            db.commit()
+            
+            background_tasks.add_task(
+                manager.send_personal_message,
+                {
+                    "tipo": "COTIZACION_RESPUESTA",
+                    "titulo": "Respuesta a Cotización",
+                    "mensaje": msg_tecnico,
+                    "aceptada": respuesta.aceptada,
+                    "incidente_id": str(incidente.id),
+                    "fecha": datetime.utcnow().strftime("%H:%M")
+                },
+                tecnico.usuario_id
+            )
+            
+    db.execute(text("SET search_path TO public"))
+    return {"message": "Respuesta procesada correctamente", "estado": nuevo_estado}

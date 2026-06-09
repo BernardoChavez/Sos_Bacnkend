@@ -9,6 +9,15 @@ class SuscripcionBase(BaseModel):
     max_tecnicos: int = 5
     precio: float
 
+class SuscripcionCreate(SuscripcionBase):
+    pass
+
+class SuscripcionUpdate(BaseModel):
+    nombre: Optional[str] = None
+    max_talleres: Optional[int] = None
+    max_tecnicos: Optional[int] = None
+    precio: Optional[float] = None
+
 class SuscripcionOut(SuscripcionBase):
     id: int
     model_config = ConfigDict(from_attributes=True)

@@ -5,7 +5,7 @@ from app.core.database import engine, Base
 from app.models import global_models, tenant_models
 from app.core.socket_manager import manager
 
-from app.api.global_routes import auth_router, usuarios_router, vehiculos_router, permisos_router, emergencias_router, empresas_router, notificaciones_router, suscripciones_router
+from app.api.global_routes import auth_router, usuarios_router, vehiculos_router, permisos_router, emergencias_router, empresas_router, notificaciones_router, suscripciones_router, dashboard_router, auditoria_router
 from app.api.tenant_routes import talleres_router, tecnicos_router, especialidades_router, incidentes_router, stats_router
 
 from app.core.audit_logger import registrar_auditoria
@@ -154,6 +154,8 @@ app.include_router(emergencias_router.router)
 app.include_router(empresas_router.router)
 app.include_router(notificaciones_router.router)
 app.include_router(suscripciones_router.router)
+app.include_router(dashboard_router.router)
+app.include_router(auditoria_router.router)
 
 # Rutas Tenant (Empresa Schema)
 app.include_router(talleres_router.router)

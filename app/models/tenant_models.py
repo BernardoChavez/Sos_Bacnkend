@@ -52,6 +52,8 @@ class Incidente(Base):
     categoria_ia = Column(String(50))
     prioridad_final = Column(String(20), default='Baja')
     diagnostico_tecnico = Column(Text)
+    cotizacion_monto = Column(Numeric(10, 2), nullable=True)
+    cotizacion_detalle = Column(Text, nullable=True)
     monto_total = Column(Numeric(10, 2), default=0.0)
     estado = Column(String(30), default='pendiente')
     fecha_creacion = Column(DateTime, default=datetime.utcnow)
